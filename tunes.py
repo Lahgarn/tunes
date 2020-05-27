@@ -1,4 +1,34 @@
 #!/usr/bin/env python3
+
+########################################################################################################################
+
+# Tunes
+# =====
+
+# A script for searching and displaying tunes from (at the moment) thesession.org as PDF files
+
+# Requirements
+# ------------
+
+# 1. Python 3.7 + lxml and requests (pip install lxml requests)
+# 2. For rendering ABC notation: https://github.com/leesavide/abcm2ps/
+# 3. As a user interface: https://github.com/davatorium/rofi (dmenu could probably also be used)
+# 4. A PDF reader that can read from stdin, I use zathura
+
+
+# Usage
+# -----
+
+# Add execute permissions:
+#   chmod +x tunes.py
+# And execute:
+#   ./tunes.py
+# You can also search for a tune directly, say "Farewell to Ireland" and run:
+#   ./tunes.py Farewell to Ireland
+
+
+########################################################################################################################
+
 import subprocess
 import sys
 from collections import namedtuple
@@ -10,11 +40,19 @@ import requests
 Tune = namedtuple('Tune', ('name', 'id', 'type'))
 TuneSetting = namedtuple('TuneSetting', ('id', 'meter', 'key', 'abc'))
 
-# Commands
+# Commands, you may use your own programs here:
+# ---
+
+# PDF viewer, the command needs to be able to a PDF from stdin (like `zathura -` does)
 PDF_VIEWER_CMD = ['zathura', '-']
+# A converter from ps to pdf, again it must be able to read from stdin and write to stdout
 PS2PDF_CMD = ['ps2pdf', '-', '-']
+# A converter from abc notation to ps, again it must be able to read from stdin and write to stdout
 ABC2PS_CMD = ['abcm2ps', '-', '-O', '-']
 
+
+# Parsing constants, highly dependant on thesession.org
+# ---
 
 # Endpoints
 TUNES_EP = 'https://thesession.org/tunes/{tune_id}'
@@ -83,14 +121,6 @@ def get_tune_settings(tune_id):
     return settings
 
 
-# dmenu (rofi)
-ROFI_TUNE_PROMPT = "tune: "
-TUNE_PREFIX = '♫'
-
-ROFI_SETTING_PROMPT = "setting: "
-SETTING_PREFIX = '♬'
-
-
 class SearchException(Exception):
     def __init__(self, query):
         self._query = query
@@ -100,14 +130,22 @@ class SearchException(Exception):
         return self._query
 
 
-def _dmenu_format_tunes(tunes):
+# rofi / dmenu funcions
+ROFI_TUNE_PROMPT = "tune: "
+TUNE_PREFIX = '♫'
+
+ROFI_SETTING_PROMPT = "setting: "
+SETTING_PREFIX = '♬'
+
+
+def _format_tunes(tunes):
     return '\n'.join("{prefix} {tune_name} [{tune_type}]".format(prefix=TUNE_PREFIX,
                                                                  tune_name=tune.name,
                                                                  tune_type=tune.type)
                      for tune in tunes)
 
 
-def _dmenu_format_settings(settings):
+def _format_settings(settings):
     return '\n'.join("{prefix} ({id}) {key} {meter}".format(prefix=SETTING_PREFIX,
                                                             id=setting.id,
                                                             key=setting.key,
@@ -117,7 +155,7 @@ def _dmenu_format_settings(settings):
 
 def select_tune(tunes):
     rofi_command = ['rofi', '-dmenu', '-i', '-format', 'i:s', '-p', ROFI_TUNE_PROMPT]
-    input_str = _dmenu_format_tunes(tunes)
+    input_str = _format_tunes(tunes)
 
     rofi_result = subprocess.run(rofi_command, input=input_str, stdout=subprocess.PIPE, encoding='utf-8')
 
@@ -135,7 +173,7 @@ def select_tune(tunes):
 
 def select_setting(settings):
     rofi_command = ['rofi', '-dmenu', '-i', '-format', 'i:s', '-p', ROFI_SETTING_PROMPT]
-    input_str = _dmenu_format_settings(settings)
+    input_str = _format_settings(settings)
 
     rofi_result = subprocess.run(rofi_command, input=input_str, stdout=subprocess.PIPE, encoding='utf-8')
 
@@ -172,8 +210,6 @@ def search_and_display(query=""):
             tune = select_tune(get_search_tunes(query=query))
         except SearchException as se:
             query = se.query
-
-    print("Got tune: ", tune)
 
     display_abc(
         select_setting(
